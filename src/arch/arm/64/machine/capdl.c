@@ -55,6 +55,12 @@ static void arm64_cap_pud_print_slots(void *pgdSlot_or_vspace, vptr_t vptr);
 /* use when only have access to pte of frames */
 static void cap_frame_print_attrs_pt(pte_t *ptSlot)
 {
+    if (pte_ptr_get_pte_type(ptSlot) == pte_pte_4k_page) {
+        cap_frame_print_attrs_impl(pte_pte_4k_page_ptr_get_SH(ptSlot),
+                                   pte_pte_4k_page_ptr_get_AP(ptSlot),
+                                   pte_pte_4k_page_ptr_get_UXN(ptSlot));
+        return;
+    }
     cap_frame_print_attrs_impl(pte_pte_page_ptr_get_SH(ptSlot),
                                pte_pte_page_ptr_get_AP(ptSlot),
                                pte_pte_page_ptr_get_UXN(ptSlot));
@@ -112,24 +118,25 @@ static void _cap_frame_print_attrs_vptr(word_t vptr, vspace_root_t *vspace)
     /* Check that the returned slot is a page. */
     if (!pte_ptr_get_valid(ret.ptSlot) ||
         (pte_pte_table_ptr_get_present(ret.ptSlot) && ret.ptBitsLeft > PAGE_BITS)) {
-        assert(0);
+        printf("[unmapped address 0x%lx]\n", vptr);
+        return;
     }
 
     word_t table_index;
     switch (ret.ptBitsLeft) {
 
-    case ARMHugePage:
+    case ARMHugePageBits:
         table_index = GET_UPT_INDEX(vptr, ULVL_FRM_ARM_PT_LVL(1));
         break;
-    case ARMLargePage:
+    case ARMLargePageBits:
         table_index = GET_UPT_INDEX(vptr, ULVL_FRM_ARM_PT_LVL(2));
         break;
-    case ARMSmallPage:
+    case ARMSmallPageBits:
         table_index = GET_UPT_INDEX(vptr, ULVL_FRM_ARM_PT_LVL(3));
         break;
     default:
-        assert(0);
-
+        printf("[unknown page size at 0x%lx]\n", vptr);
+        return;
     }
     printf("frame_%p_%04lu ", ret.ptSlot, table_index);
     cap_frame_print_attrs_pt(ret.ptSlot);
@@ -213,7 +220,7 @@ static void arm64_cap_pud_print_slots(void *pgdSlot_or_vspace, vptr_t vptr)
     printf("}\n"); /* pgd/pud */
 
     for (word_t i = 0; i < BIT(index_bits); i++) {
-        pte_t *pudSlot = pud + GET_UPT_INDEX(i, ULVL_FRM_ARM_PT_LVL(1));
+        pte_t *pudSlot = pud + i;
         if (pte_ptr_get_pte_type(pudSlot) == pte_pte_table) {
             arm64_cap_pd_print_slots(pudSlot, vptr + (i * GET_ULVL_PGSIZE(ULVL_FRM_ARM_PT_LVL(1))));
         }
@@ -269,6 +276,10 @@ void print_cap_arch(cap_t cap)
         pte_t *target_pt = PT_PTR(cap_page_table_cap_get_capPTBasePtr(cap));
 
         findVSpaceForASID_ret_t find_ret = findVSpaceForASID(asid);
+        if (find_ret.status != EXCEPTION_NONE) {
+            printf("[unmapped page table %p]\n", target_pt);
+            break;
+        }
         pte_t *ptSlot = NULL;
         pte_t *pt = (pte_t *)find_ret.vspace_root;
         word_t level;
@@ -281,7 +292,7 @@ void print_cap_arch(cap_t cap)
             pt = paddr_to_pptr(pte_pte_table_ptr_get_pt_base_address(ptSlot));
         }
         if (pt != target_pt) {
-            /* didn't find it */
+            printf("[unmapped page table %p]\n", target_pt);
             break;
         }
 
@@ -313,7 +324,10 @@ void print_cap_arch(cap_t cap)
     case cap_frame_cap: {
         vptr_t vptr = cap_frame_cap_get_capFMappedAddress(cap);
         findVSpaceForASID_ret_t find_ret = findVSpaceForASID(cap_frame_cap_get_capFMappedASID(cap));
-        assert(find_ret.status == EXCEPTION_NONE);
+        if (find_ret.status != EXCEPTION_NONE) {
+            printf("[unmapped frame %p]\n", (void *)cap_frame_cap_get_capFBasePtr(cap));
+            break;
+        }
         _cap_frame_print_attrs_vptr(vptr, find_ret.vspace_root);
         break;
     }
