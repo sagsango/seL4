@@ -10,6 +10,9 @@
 #include <sel4/types.h>
 #include <sel4/syscalls.h>
 
+/* XXX: Per thread ipc buffer - only one buufer per thread 
+ * 	its like per thread resource - like kernel stack
+ */
 extern LIBSEL4_THREAD_LOCAL seL4_IPCBuffer *__sel4_ipc_buffer;
 
 #ifdef CONFIG_KERNEL_INVOCATION_REPORT_ERROR_IPC
