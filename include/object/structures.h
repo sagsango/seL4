@@ -170,6 +170,7 @@ enum _thread_state {
 };
 typedef word_t _thread_state_t;
 
+/* XXX: tcb_cnode_index */
 /* A TCB CNode and a TCB are always allocated together, and adjacently.
  * The CNode comes first. */
 enum tcb_cnode_index {

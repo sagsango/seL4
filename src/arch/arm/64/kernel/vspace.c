@@ -1540,6 +1540,9 @@ static exception_t decodeARMPageTableInvocation(word_t invLabel, word_t length,
     lookupPTSlot_ret_t ptSlot;
     findVSpaceForASID_ret_t find_ret;
 
+    /* CAP LIFE 12: Explicit Unmap keeps the invoked cap and clears its
+     * mapped flag. Require the final cap because other copies would
+     * still carry the old mapping metadata. */
     if (invLabel == ARMPageTableUnmap) {
         if (unlikely(!isFinalCapability(cte))) {
             current_syscall_error.type = seL4_RevokeFirst;
@@ -1567,6 +1570,8 @@ static exception_t decodeARMPageTableInvocation(word_t invLabel, word_t length,
     }
 
     vaddr = getSyscallArg(0, buffer);
+    /* CAP LIFE: The extra VSpace cap authorizes the destination. The
+     * virtual address selects a location within that VSpace. */
     vspaceRootCap = current_extra_caps.excaprefs[0]->cap;
 
     if (unlikely(!isValidNativeRoot(vspaceRootCap))) {

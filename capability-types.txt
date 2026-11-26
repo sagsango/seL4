@@ -1,0 +1,214 @@
+seL4 CAPABILITY TYPES — AArch64 QEMU lab
+========================================
+
+Scope
+  The primary table comes from the generated cap_tag enum for this lab.
+  Current configuration uses EL2, a single core, and classic non-MCS IPC.
+  Each bordered row describes one capability tag. Long cells wrap within
+  their columns. The checks are a source-reading guide. Several operations
+  have additional conditions and architecture-specific errors.
+
+How to read the table
+  The CPtr is resolved in the caller's CSpace. A CNode slot is a cte_t
+  containing cap_t plus cteMDBNode. cap_t has two 64-bit words in this
+  build, with a tag identifying the type-specific fields. Syscall
+  dispatch checks that the cap supports the operation, and its decoder
+  validates rights, arguments and any additional caps. Shared entry
+  points are handleInvocation(), lookupCapAndSlot(), resolveAddressBits(),
+  decodeInvocation() and, for most AArch64 memory caps, decodeARMMMUInvocation().
+
+ACTIVE TAGS
++-----+---------------------------+--------------------------------+----------------------------------+--------------------------------------------------+----------------------------------+
+| Tag | Capability                | Structs and fields             | Operations                       | Checks by operation                              | Kernel functions                 |
++-----+---------------------------+--------------------------------+----------------------------------+--------------------------------------------------+----------------------------------+
+|   0 | Null (cap_null_cap)       | Empty cte_t.cap; no backing    | None                             | An empty slot can resolve as a slot, but         | lookupCapAndSlot;                |
+|     |                           | object or authority            |                                  | supplies no invocable cap; receive requires a    | decodeInvocation; handleRecv     |
+|     |                           |                                |                                  | permitted endpoint or notification cap           |                                  |
++-----+---------------------------+--------------------------------+----------------------------------+--------------------------------------------------+----------------------------------+
+|   1 | Frame (cap_frame_cap)     | cap_t: frame base, size, VM    | ARM_Page_Map; Unmap; GetAddress; | Map: extra cap must be a valid VSpace with an    | decodeARMFrameInvocation;        |
+|     |                           | rights, device flag, mapped    | Clean_Data, Invalidate_Data,     | ASID; VA must be aligned to the frame size and   | lookupPTSlot; findVSpaceForASID; |
+|     |                           | ASID and virtual address;      | CleanInvalidate_Data,            | supported by the page-table level; a mapped cap  | maskVMRights;                    |
+|     |                           | backing object is physical     | Unify_Instruction                | can only remap the same ASID and address;        | performPageInvocationMap;        |
+|     |                           | memory                         |                                  | mapping rights are bounded by cap rights. Unmap: | performPageInvocationUnmap;      |
+|     |                           |                                |                                  | uses this cap's mapping metadata. Cache ops:     | cap_frame_cap_new                |
+|     |                           |                                |                                  | require a live mapping, valid range and eligible |                                  |
+|     |                           |                                |                                  | memory; invalidate has additional                |                                  |
+|     |                           |                                |                                  | write-permission checks where applicable.        |                                  |
+|     |                           |                                |                                  | GetAddress: returns the frame physical base      |                                  |
++-----+---------------------------+--------------------------------+----------------------------------+--------------------------------------------------+----------------------------------+
+|   2 | Untyped (cap_untyped_cap) | cap_t: region base, block      | Untyped_Retype creates objects   | Check invocation and object type, object-size    | decodeUntypedInvocation;         |
+|     |                           | size, device bit, free index   | and installs their first caps    | rules, remaining aligned memory, destination     | invokeUntyped_Retype;            |
+|     |                           |                                |                                  | CNode path and contiguous empty slots. Device    | resetUntypedCap;                 |
+|     |                           |                                |                                  | untyped is restricted to permitted object types  | createNewObjects                 |
+|     |                           |                                |                                  | such as frames. Existing descendants affect      |                                  |
+|     |                           |                                |                                  | whether the region can be reset or reused        |                                  |
++-----+---------------------------+--------------------------------+----------------------------------+--------------------------------------------------+----------------------------------+
+|   3 | Page table                | cap_t: page-table base, mapped | ARM_PageTable_Map; Unmap         | Map: table must be unmapped, extra cap must name | decodeARMPageTableInvocation;    |
+|     | (cap_page_table_cap)      | flag, ASID and virtual         |                                  | a valid ASID-assigned VSpace, lookup must find a | lookupPTSlot; isFinalCapability; |
+|     |                           | address; table is an array of  |                                  | suitable non-leaf level and an empty entry.      | performPageTableInvocationMap;   |
+|     |                           | pte_t                          |                                  | Unmap: requires the final capability to the      | performPageTableInvocationUnmap  |
+|     |                           |                                |                                  | table or returns RevokeFirst                     |                                  |
++-----+---------------------------+--------------------------------+----------------------------------+--------------------------------------------------+----------------------------------+
+|   4 | Endpoint                  | endpoint_t: queue head, tail   | Send, NBSend, Call, Recv,        | Sending requires CanSend; receiving requires     | handleInvocation;                |
+|     | (cap_endpoint_cap)        | and state; cap_t: endpoint     | NBRecv; message and optional     | CanReceive. Grant permits extra-cap transfer     | decodeInvocation; handleRecv;    |
+|     |                           | pointer, badge, CanSend,       | capability transfer              | through normal IPC; GrantReply can authorize a   | sendIPC; receiveIPC;             |
+|     |                           | CanReceive, CanGrant and       |                                  | reply capability without Grant. Receiver         | transferCaps; setupCallerCap     |
+|     |                           | CanGrantReply                  |                                  | supplies a valid empty receive slot for a        |                                  |
+|     |                           |                                |                                  | transferred cap. Sender or receiver blocks on    |                                  |
+|     |                           |                                |                                  | the endpoint if its counterpart is absent and    |                                  |
+|     |                           |                                |                                  | the operation is blocking                        |                                  |
++-----+---------------------------+--------------------------------+----------------------------------+--------------------------------------------------+----------------------------------+
+|   6 | Notification              | notification_t: state, pending | Signal, Wait, Poll;              | Signal requires send rights; wait and poll       | sendSignal; receiveSignal;       |
+|     | (cap_notification_cap)    | badge bits, queue and bound    | TCB_BindNotification and         | require receive rights. Binding checks           | completeSignal; handleRecv;      |
+|     |                           | TCB; cap_t: pointer, badge,    | UnbindNotification use the TCB   | notification type, receive authority,            | decodeBindNotification;          |
+|     |                           | send and receive bits          | cap as service                   | outstanding waiters and whether the thread or    | decodeUnbindNotification         |
+|     |                           |                                |                                  | notification is already bound. Pending badges    |                                  |
+|     |                           |                                |                                  | can be combined as a bitmask                     |                                  |
++-----+---------------------------+--------------------------------+----------------------------------+--------------------------------------------------+----------------------------------+
+|   8 | Reply (cap_reply_cap)     | Classic cap_t: target TCB      | Classic Reply or ReplyRecv; Send | The master reply cap is kernel bookkeeping. A    | setupReplyMaster;                |
+|     |                           | reference, master bit and      | on a saved one-shot reply cap;   | saved reply goes to the particular thread        | setupCallerCap; handleReply;     |
+|     |                           | grant bit; MCS uses a reply_t  | CNode_SaveCaller saves the       | waiting on it. SaveCaller needs a valid empty    | invokeCNodeSaveCaller;           |
+|     |                           | object                         | current reply into a slot        | slot. Ordinary successful classic reply consumes | performInvocation_Reply;         |
+|     |                           |                                |                                  | the one-shot cap and makes the caller runnable   | doReplyTransfer                  |
++-----+---------------------------+--------------------------------+----------------------------------+--------------------------------------------------+----------------------------------+
+|   9 | VSpace (cap_vspace_cap)   | vspace_root_t: root page table | ARM_VSpace Clean_Data,           | Cache maintenance checks the virtual range, user | decodeARMVSpaceRootInvocation;   |
+|     |                           | of pte_t entries; cap_t: root  | Invalidate_Data,                 | address limits, ASID/root relationship and       | findVSpaceForASID; lookupPTSlot; |
+|     |                           | pointer and ASID mapping state | CleanInvalidate_Data and         | resolved mapping; ranges and mapping rights must | decodeTCBConfigure;              |
+|     |                           |                                | Unify_Instruction; extra cap for | meet operation-specific rules. When used for TCB | decodeSetSpace                   |
+|     |                           |                                | mapping and configuring a TCB    | configuration the supplied root must be a valid  |                                  |
+|     |                           |                                |                                  | VSpace cap                                       |                                  |
++-----+---------------------------+--------------------------------+----------------------------------+--------------------------------------------------+----------------------------------+
+|  10 | CNode (cap_cnode_cap)     | cte_t array; cap_t: base,      | Copy, Mint, Move, Mutate,        | Check CNode root, slot resolution and depth;     | resolveAddressBits;              |
+|     |                           | radix, guard and guard size;   | Rotate, Delete, Revoke,          | derivation operations require an eligible source | lookupTargetSlot;                |
+|     |                           | cteMDBNode records derivation  | SaveCaller (classic),            | and a suitable destination. Copy and Mint cannot | decodeCNodeInvocation;           |
+|     |                           | relationships                  | CancelBadgedSends                | strengthen rights; Mint and Mutate validate cap  | deriveCap; maskCapRights;        |
+|     |                           |                                |                                  | data. Rotate checks slot relationships.          | updateCapData; cteInsert;        |
+|     |                           |                                |                                  | CancelBadgedSends requires an eligible badged    | cteDelete; cteRevoke             |
+|     |                           |                                |                                  | endpoint cap                                     |                                  |
++-----+---------------------------+--------------------------------+----------------------------------+--------------------------------------------------+----------------------------------+
+|  11 | ASIDControl               | Control authority to allocate  | ARM_ASIDControl_MakePool         | Requires a correctly sized non-device untyped    | decodeARMMMUInvocation;          |
+|     | (cap_asid_control_cap)    | ASID pools; pool data uses     |                                  | cap and a destination CNode cap. Checks that the | ensureNoChildren;                |
+|     |                           | asid_pool_t                    |                                  | untyped has no descendants, a pool index is      | ensureEmptySlot;                 |
+|     |                           |                                |                                  | free, and the destination slot resolves and is   | performASIDControlInvocation     |
+|     |                           |                                |                                  | empty                                            |                                  |
++-----+---------------------------+--------------------------------+----------------------------------+--------------------------------------------------+----------------------------------+
+|  12 | Thread / TCB              | tcb_t: register context,       | ReadRegisters, WriteRegisters,   | Check register counts and thread restrictions;   | decodeTCBInvocation;             |
+|     | (cap_thread_cap)          | scheduler state, priority/MCP  | CopyRegisters, Suspend, Resume,  | sanitize written registers. Configure checks     | decodeReadRegisters;             |
+|     |                           | and CSpace/VSpace/IPC          | Configure, SetPriority,          | supplied root cap types, CNode data and          | decodeWriteRegisters;            |
+|     |                           | references; cap_t points to    | SetMCPriority, SetSchedParams,   | IPC-frame alignment/type. Priority and MCP       | decodeTCBConfigure;              |
+|     |                           | the TCB                        | SetIPCBuffer, SetSpace,          | changes check an authority TCB and range.        | decodeSetIPCBuffer;              |
+|     |                           |                                | BindNotification,                | Notification binding checks type, rights and     | decodeSetSpace;                  |
+|     |                           |                                | UnbindNotification, SetTLSBase   | current binding                                  | decodeSetPriority;               |
+|     |                           |                                | and SetFlags; other methods vary |                                                  | decodeSetMCPriority;             |
+|     |                           |                                | by build                         |                                                  | decodeBindNotification           |
++-----+---------------------------+--------------------------------+----------------------------------+--------------------------------------------------+----------------------------------+
+|  13 | ASIDPool                  | asid_pool_t holds ASID         | ARM_ASIDPool_Assign              | Check the supplied cap is an unassigned VSpace;  | decodeARMMMUInvocation;          |
+|     | (cap_asid_pool_cap)       | mappings; cap_t records pool   |                                  | specified pool exists and matches the pool cap;  | performASIDPoolInvocation;       |
+|     |                           | pointer and ASID base;         |                                  | choose a free ASID in the pool                   | findVSpaceForASID                |
+|     |                           | asid_map_t can refer to a      |                                  |                                                  |                                  |
+|     |                           | VSpace                         |                                  |                                                  |                                  |
++-----+---------------------------+--------------------------------+----------------------------------+--------------------------------------------------+----------------------------------+
+|  14 | IRQControl                | Control cap for issuing        | IRQControl_Get; ARM GetTrigger;  | Check label, message and destination CNode, IRQ  | decodeIRQControlInvocation;      |
+|     | (cap_irq_control_cap)     | capabilities associated with   | GetTriggerCore on applicable SMP | range, IRQ availability and an empty destination | Arch_decodeIRQControlInvocation; |
+|     |                           | platform IRQs                  | builds; IssueSGISignal where     | slot. ARM variants validate trigger or target    | isIRQActive; ensureEmptySlot     |
+|     |                           |                                | supported                        | constraints as applicable. SGI issuing also      |                                  |
+|     |                           |                                |                                  | checks platform support                          |                                  |
++-----+---------------------------+--------------------------------+----------------------------------+--------------------------------------------------+----------------------------------+
+|  15 | VCPU (cap_vcpu_cap)       | vcpu_t: guest state,           | ARM_VCPU_SetTCB, ReadRegs,       | SetTCB requires a TCB cap. Read/write validate   | decodeARMVCPUInvocation;         |
+|     |                           | associated TCB and virtual     | WriteRegs, InjectIRQ, AckVPPI    | register selector and request length. InjectIRQ  | decodeVCPUSetTCB;                |
+|     |                           | interrupt controller state;    |                                  | validates virtual interrupt ID, priority, group  | decodeVCPUReadReg;               |
+|     |                           | cap_t points to the VCPU       |                                  | and list-register index/state. AckVPPI checks    | decodeVCPUWriteReg;              |
+|     |                           |                                |                                  | the interrupt selector                           | decodeVCPUInjectIRQ;             |
+|     |                           |                                |                                  |                                                  | decodeVCPUAckVPPI                |
++-----+---------------------------+--------------------------------+----------------------------------+--------------------------------------------------+----------------------------------+
+|  16 | IRQHandler                | cap_t identifies a specific    | IRQHandler_Ack; SetNotification; | SetNotification requires a notification cap with | decodeIRQHandlerInvocation;      |
+|     | (cap_irq_handler_cap)     | IRQ; notification capability   | Clear                            | send rights; clear removes the binding. Ack      | invokeIRQHandler_AckIRQ;         |
+|     |                           | is stored in the kernel's IRQ  |                                  | unmasks the interrupt associated with this cap   | invokeIRQHandler_SetIRQHandler;  |
+|     |                           | handler slot                   |                                  |                                                  | invokeIRQHandler_ClearIRQHandler |
+|     |                           |                                |                                  |                                                  | ; handleInterrupt                |
++-----+---------------------------+--------------------------------+----------------------------------+--------------------------------------------------+----------------------------------+
+|  18 | Zombie (cap_zombie_cap)   | Internal cap encoding          | No ordinary userspace            | The kernel tracks partial destruction and        | finaliseCap; cteDelete;          |
+|     |                           | object-deletion state and      | invocation; encountered during   | reduces the zombie until cleanup is complete     | reduceZombie                     |
+|     |                           | remaining entries              | CNode/TCB deletion               |                                                  |                                  |
++-----+---------------------------+--------------------------------+----------------------------------+--------------------------------------------------+----------------------------------+
+|  20 | Domain (cap_domain_cap)   | Control authority over         | DomainSet_Set;                   | Set requires a target TCB cap and a configured   | decodeDomainInvocation;          |
+|     |                           | scheduling domains and the     | ScheduleConfigure;               | domain. Schedule setup checks indices, the       | decodeDomainSetSetInvocation;    |
+|     |                           | domain schedule                | ScheduleSetStart                 | domain, duration and end-marker rules; a start   | decodeDomainScheduleConfigure;   |
+|     |                           |                                |                                  | entry must not be an end marker                  | decodeDomainScheduleSetStart     |
++-----+---------------------------+--------------------------------+----------------------------------+--------------------------------------------------+----------------------------------+
+|  27 | SGI signal                | cap_t encodes the software     | Send to generate the encoded ARM | IRQControl issues the cap after checking GIC     | Arch_decodeIRQControlInvocation; |
+|     | (cap_sgi_signal_cap)      | interrupt ID and target        | SGI                              | support, architectural ID/target limits and      | decodeSGISignalInvocation;       |
+|     |                           |                                |                                  | destination slot. The target is fixed in the     | plat_sendSGI                     |
+|     |                           |                                |                                  | cap; the kernel's architectural limit check does |                                  |
+|     |                           |                                |                                  | not prove that the core exists                   |                                  |
++-----+---------------------------+--------------------------------+----------------------------------+--------------------------------------------------+----------------------------------+
+
+CONFIGURATION-DEPENDENT TAGS (absent from this build)
+Tags 17/19/21/23 require ARM SMMU, 22/24 require MCS, and 25 requires SMC support.
+
++-----+---------------------------+--------------------------------+----------------------------------+--------------------------------------------------+----------------------------------+
+| Tag | Capability                | Structs and fields             | Operations                       | Checks by operation                              | Kernel functions                 |
++-----+---------------------------+--------------------------------+----------------------------------+--------------------------------------------------+----------------------------------+
+|  17 | SIDControl                | ARM SMMU controller authority  | GetSID, GetFault, ClearFault     | Check requested SID range and availability for   | decodeARMSIDControlInvocation    |
+|     | (cap_sid_control_cap)     | over stream IDs                |                                  | GetSID; destination slot must be valid and empty |                                  |
++-----+---------------------------+--------------------------------+----------------------------------+--------------------------------------------------+----------------------------------+
+|  19 | SID (cap_sid_cap)         | ARM SMMU stream ID capability  | BindCB, UnbindCB                 | Bind requires a context-bank cap and valid       | decodeARMSIDInvocation           |
+|     |                           |                                |                                  | binding state; unbind checks the current binding |                                  |
++-----+---------------------------+--------------------------------+----------------------------------+--------------------------------------------------+----------------------------------+
+|  21 | CBControl                 | ARM SMMU controller authority  | GetCB, TLBInvalidateAll          | GetCB checks context-bank range and availability | decodeARMCBControlInvocation     |
+|     | (cap_cb_control_cap)      | over context banks             |                                  | plus the destination slot                        |                                  |
++-----+---------------------------+--------------------------------+----------------------------------+--------------------------------------------------+----------------------------------+
+|  22 | SchedContext              | sched_context_t holds MCS      | Bind, Unbind, UnbindObject,      | Checks object type, existing scheduler bindings  | decodeSchedContextInvocation;    |
+|     | (cap_sched_context_cap)   | scheduling budget and binding  | Consumed, YieldTo                | and context state as applicable; YieldTo has     | decodeSchedContext_Bind;         |
+|     |                           | state                          |                                  | additional scheduling checks                     | decodeSchedContext_YieldTo       |
++-----+---------------------------+--------------------------------+----------------------------------+--------------------------------------------------+----------------------------------+
+|  23 | CB (cap_cb_cap)           | ARM SMMU context-bank          | AssignVspace, UnassignVspace,    | Assign checks the VSpace cap and binding state;  | decodeARMCBInvocation            |
+|     |                           | capability                     | TLBInvalidate, CBGetFault,       | unassignment and invalidation require suitable   |                                  |
+|     |                           |                                | CBClearFault                     | context-bank state                               |                                  |
++-----+---------------------------+--------------------------------+----------------------------------+--------------------------------------------------+----------------------------------+
+|  24 | SchedControl              | MCS scheduling control         | ConfigureFlags (used by          | Check the supplied scheduling context, available | decodeSchedControlInvocation; de |
+|     | (cap_sched_control_cap)   | authority associated with a    | scheduling-context configuration | budget and period ranges, refill parameters and  | codeSchedControl_ConfigureFlags  |
+|     |                           | core                           | wrappers)                        | flags                                            |                                  |
++-----+---------------------------+--------------------------------+----------------------------------+--------------------------------------------------+----------------------------------+
+|  25 | SMC (cap_smc_cap)         | ARM Secure Monitor Call        | ARM_SMC_Call                     | Check method and argument count; a nonzero badge | decodeARMSMCInvocation;          |
+|     |                           | capability with an optional    |                                  | must match the requested SMC function ID         | invokeSMCCall                    |
+|     |                           | function-ID badge              |                                  |                                                  |                                  |
++-----+---------------------------+--------------------------------+----------------------------------+--------------------------------------------------+----------------------------------+
+
+SOURCE PATHS (relative to the synced workspace)
+  Tags and accessors: build/kernel/generated/arch/object/structures_gen.h
+  Bitfields: kernel/include/object/structures_64.bf
+             kernel/include/arch/arm/arch/64/mode/object/structures.bf
+  Objects: kernel/include/object/structures.h
+           kernel/include/arch/arm/arch/64/mode/object/structures.h
+           kernel/include/arch/arm/arch/object/vcpu.h
+  Lookup and IPC: kernel/src/api/syscall.c, kernel/src/kernel/cspace.c,
+                  kernel/src/kernel/thread.c
+  Core decoders: kernel/src/object/ (files named for the object type)
+  ARM VM and ASIDs: kernel/src/arch/arm/64/kernel/vspace.c
+  ARM VCPU, SGI, SMMU and SMC: kernel/src/arch/arm/object/
+  Public API reference: https://docs.sel4.systems/projects/sel4/api-doc.html
+
+
+# Example of cap creation:
+static inline cap_t CONST
+cap_page_table_cap_new(uint64_t capPTMappedASID, uint64_t capPTBasePtr, uint64_t capPTIsMapped, uint64_t capPTMappedAddress) {
+    cap_t cap;
+
+    /* fail if user has passed bits that we will override */
+    assert((capPTMappedASID & ~0xffffull) == ((0 && (capPTMappedASID & (1ull << 47))) ? 0x0 : 0));
+    assert((capPTBasePtr & ~0xffffffffffffull) == ((0 && (capPTBasePtr & (1ull << 47))) ? 0x0 : 0));
+    assert(((uint64_t)cap_page_table_cap & ~0x1full) == ((0 && ((uint64_t)cap_page_table_cap & (1ull << 47))) ? 0x0 : 0));
+    assert((capPTIsMapped & ~0x1ull) == ((0 && (capPTIsMapped & (1ull << 47))) ? 0x0 : 0));
+    assert((capPTMappedAddress & ~0xfffffff00000ull) == ((0 && (capPTMappedAddress & (1ull << 47))) ? 0x0 : 0));
+
+    cap.words[0] = 0
+        | ((uint64_t)cap_page_table_cap & 0x1full) << 59
+        | (capPTIsMapped & 0x1ull) << 48
+        | (capPTMappedAddress & 0xfffffff00000ull) >> 0;
+    cap.words[1] = 0
+        | (capPTMappedASID & 0xffffull) << 48
+        | (capPTBasePtr & 0xffffffffffffull) >> 0;
+
+    return cap;
+}

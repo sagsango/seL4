@@ -176,6 +176,8 @@ finaliseCap_ret_t finaliseCap(cap_t cap, bool_t final, bool_t exposed)
     switch (cap_get_capType(cap)) {
     case cap_cnode_cap: {
         if (final) {
+            /* CAP LIFE 11: The final CNode cap leaves a zombie that
+             * records the CNode's slots for incremental deletion. */
             fc_ret.remainder =
                 Zombie_new(
                     1ul << cap_cnode_cap_get_capCNodeRadix(cap),
@@ -216,6 +218,8 @@ finaliseCap_ret_t finaliseCap(cap_t cap, bool_t final, bool_t exposed)
 #ifdef CONFIG_DEBUG_BUILD
             tcbDebugRemove(tcb);
 #endif
+            /* CAP LIFE 11: The thread is suspended. The zombie below
+             * records its internal slots for cleanup. */
             Arch_prepareThreadDelete(tcb);
             fc_ret.remainder =
                 Zombie_new(

@@ -10,6 +10,7 @@
 #include <sel4/macros.h>
 #include <sel4/sel4_arch/constants.h>
 
+/* XXX: All the slots in the root CNode */
 /* caps with fixed slot positions in the root CNode */
 enum seL4_RootCNodeCapSlots {
     seL4_CapNull                =  0, /* null cap */

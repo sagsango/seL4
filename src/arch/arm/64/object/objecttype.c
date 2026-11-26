@@ -1,3 +1,4 @@
+/* XXX: cap reated things are here */
 /*
  * Copyright 2020, Data61, CSIRO (ABN 41 687 119 230)
  *
@@ -44,6 +45,8 @@ deriveCap_ret_t Arch_deriveCap(cte_t *slot, cap_t cap)
         }
         return ret;
 
+    /* CAP LIFE 03: A page-table cap can be derived after mapping. The
+     * result carries the same table pointer and mapping metadata. */
     case cap_page_table_cap:
         if (cap_page_table_cap_get_capPTIsMapped(cap)) {
             ret.cap = cap;
@@ -161,6 +164,9 @@ finaliseCap_ret_t Arch_finaliseCap(cap_t cap, bool_t final)
         }
         break;
 
+    /* CAP LIFE 12: Deleting a non-final page-table cap leaves its mapping
+     * installed. Deleting the final mapped cap detaches the table using the
+     * recorded ASID and virtual address. */
     case cap_page_table_cap:
         if (final && cap_page_table_cap_get_capPTIsMapped(cap)) {
             unmapPageTable(cap_page_table_cap_get_capPTMappedASID(cap),

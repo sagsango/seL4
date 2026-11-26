@@ -1,3 +1,4 @@
+/* XXX: capability node  = cnode */
 /*
  * Copyright 2014, General Dynamics C4 Systems
  *
@@ -123,6 +124,9 @@ exception_t decodeCNodeInvocation(word_t invLabel, word_t length, cap_t cap,
 
             cap_rights = rightsFromWord(getSyscallArg(4, buffer));
             srcCap = maskCapRights(cap_rights, srcSlot->cap);
+            /* CAP LIFE 03: Copy derives a cap using the requested rights
+             * mask. Mint below also applies cap-specific data before
+             * deriving. Both install the result through cteInsert(). */
             dc_ret = deriveCap(srcSlot, srcCap);
             if (dc_ret.status != EXCEPTION_NONE) {
                 userError("Error deriving cap for CNode Copy operation.");
@@ -409,6 +413,10 @@ static void setUntypedCapAsFull(cap_t srcCap, cap_t newCap, cte_t *srcSlot)
     }
 }
 
+/* CAP LIFE 05: Insert the derived cap after the source in the MDB.
+ * These links can cross CSpaces. The cap type and derivation determine the
+ * new entry's revocability. A plain page-table copy adds a reference to the
+ * same object and does not become a new revocation root. */
 void cteInsert(cap_t newCap, cte_t *srcSlot, cte_t *destSlot)
 {
     mdb_node_t srcMDB, newMDB;
@@ -444,6 +452,8 @@ void cteInsert(cap_t newCap, cte_t *srcSlot, cte_t *destSlot)
     }
 }
 
+/* CAP LIFE 06: Relocate the capability and its MDB entry. Repair the
+ * neighboring links to point to the destination and clear the source slot. */
 void cteMove(cap_t newCap, cte_t *srcSlot, cte_t *destSlot)
 {
     mdb_node_t mdb;
@@ -527,6 +537,9 @@ void cteSwap(cap_t cap1, cte_t *slot1, cap_t cap2, cte_t *slot2)
             CTE_REF(slot1));
 }
 
+/* CAP LIFE 07: Keep the selected cap and delete matching descendants.
+ * Read its next link again after each deletion because cteDelete() can
+ * change the MDB. An untyped ancestor can reach caps in other CSpaces. */
 exception_t cteRevoke(cte_t *slot)
 {
     cte_t *nextPtr;
@@ -551,6 +564,9 @@ exception_t cteRevoke(cte_t *slot)
     return EXCEPTION_NONE;
 }
 
+/* CAP LIFE 09: Delete targets a slot. Other copies can survive. If this
+ * is the final cap, object-specific cleanup can also remove internal slots
+ * owned by a CNode or TCB. */
 exception_t cteDelete(cte_t *slot, bool_t exposed)
 {
     finaliseSlot_ret_t fs_ret;
@@ -586,6 +602,8 @@ static void emptySlot(cte_t *slot, cap_t cleanupInfo)
             mdb_node_ptr_set_mdbFirstBadged(&next->cteMDBNode,
                                             mdb_node_get_mdbFirstBadged(next->cteMDBNode) ||
                                             mdb_node_get_mdbFirstBadged(mdbNode));
+        /* CAP LIFE 13: The neighboring MDB entries are now linked past
+         * this slot. Clear it so future lookups find an empty slot. */
         slot->cap = cap_null_cap_new();
         slot->cteMDBNode = nullMDBNode;
 
@@ -643,6 +661,9 @@ static finaliseSlot_ret_t finaliseSlot(cte_t *slot, bool_t immediate)
             return ret;
         }
 
+        /* CAP LIFE 11: A finalizer can leave a zombie cap that records
+         * internal slots still to be cleaned up. Store the remainder so
+         * deletion can continue after a preemption point. */
         slot->cap = fc_ret.remainder;
 
         if (!immediate && capCyclicZombie(fc_ret.remainder, slot)) {
@@ -755,6 +776,8 @@ void cteDeleteOne(cte_t *slot)
     }
 }
 
+/* CAP LIFE 02: Retype inserts the initial cap after the source untyped
+ * entry. The MDB flags and region relationship support later revocation. */
 void insertNewCap(cte_t *parent, cte_t *slot, cap_t cap)
 {
     cte_t *next;
@@ -785,6 +808,9 @@ void setupReplyMaster(tcb_t *thread)
 }
 #endif
 
+/* CAP LIFE 08: Revocation follows MDB relationships. The ancestor's
+ * revocable flag, the region check, and the cap-specific rules determine
+ * whether the next entry is a descendant. */
 bool_t PURE isMDBParentOf(cte_t *cte_a, cte_t *cte_b)
 {
     if (!mdb_node_get_mdbRevocable(cte_a->cteMDBNode)) {
@@ -856,6 +882,9 @@ exception_t ensureEmptySlot(cte_t *slot)
     return EXCEPTION_NONE;
 }
 
+/* CAP LIFE 10: Caps to the same object are grouped in the MDB. Compare
+ * neighbors to determine whether an object has another cap. The slot used
+ * to create the object has no special status in this test. */
 bool_t PURE isFinalCapability(cte_t *cte)
 {
     mdb_node_t mdb;

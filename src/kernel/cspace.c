@@ -54,6 +54,8 @@ lookupSlot_raw_ret_t lookupSlot(tcb_t *thread, cptr_t capptr)
     resolveAddressBits_ret_t res_ret;
     lookupSlot_raw_ret_t ret;
 
+    /* CAP LIFE: Start lookup at the CNode cap stored in the thread's TCB.
+     * The CPtr is a path through that CSpace. */
     threadRoot = TCB_PTR_CTE_PTR(thread, tcbCTable)->cap;
     res_ret = resolveAddressBits(threadRoot, capptr, wordBits);
 
@@ -168,6 +170,8 @@ resolveAddressBits_ret_t resolveAddressBits(cap_t nodeCap, cptr_t capptr, word_t
             return ret;
         }
 
+        /* CAP LIFE: After validating the guard and depth, use the next
+         * radix bits to select a slot in this CNode. */
         offset = (capptr >> (n_bits - levelBits)) & MASK(radixBits);
         slot = CTE_PTR(cap_cnode_cap_get_capCNodePtr(nodeCap)) + offset;
 

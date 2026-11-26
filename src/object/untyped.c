@@ -281,6 +281,9 @@ exception_t invokeUntyped_Retype(cte_t *srcSlot,
     void *regionBase = WORD_PTR(cap_untyped_cap_get_capPtr(srcSlot->cap));
     exception_t status;
 
+    /* CAP LIFE 01: The decoder permits a reset when the untyped cap has no
+     * MDB children. Retype can then reuse the region from the beginning.
+     * Revoke removes descendants. The later Retype resets the watermark. */
     if (reset) {
         status = resetUntypedCap(srcSlot);
         if (status != EXCEPTION_NONE) {

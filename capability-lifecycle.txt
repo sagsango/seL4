@@ -1,0 +1,200 @@
+==============================================================================
+seL4 CAPABILITY LIFECYCLE                                    AArch64 lab guide
+==============================================================================
+
+Deleting the parent's copy leaves the child's copy valid. To remove authority
+from other CSpaces, revoke from a capability that the kernel recognizes as
+their derivation ancestor. To stop a child process, manage its threads and
+resources explicitly through the process server.
+
+1. CAPABILITIES, SLOTS, AND PROCESSES
+------------------------------------------------------------------------------
+
+  Term           Meaning
+  -------------  ------------------------------------------------------------
+  CPtr           A userspace value resolved through the caller's CSpace.
+  CSpace         The capability namespace accessible to a thread.
+  CNode          A kernel object containing capability slots.
+  CTE            A kernel slot entry containing cap_t and cteMDBNode.
+  cap_t          Object reference or control authority, plus type-specific
+                 fields such as rights, badge, or mapping metadata.
+  MDB            Kernel-maintained links and flags used to identify related
+                 capabilities and determine when a capability is the last
+                 one to an object.
+  TCB            The kernel object representing a thread.
+
+A process parent is a userspace relationship. An MDB parent is a relationship
+between capability slots. Creating a thread through process-server does not
+create a kernel rule that stops the thread when its creator stops.
+
+2. HOW A CAPABILITY REACHES ANOTHER PROCESS
+------------------------------------------------------------------------------
+
+  Operation                    Kernel action
+  ---------------------------  ----------------------------------------------
+  seL4_Untyped_Retype          Creates objects from untyped memory and inserts
+                               their initial caps with insertNewCap().
+
+  seL4_CNode_Copy              Resolves the source and empty destination
+                               slots, masks applicable rights, calls
+                               deriveCap(), and inserts with cteInsert().
+
+  seL4_CNode_Mint              Derives and inserts a cap with applicable
+                               rights and cap data, such as an endpoint
+                               badge or a CNode guard.
+
+  IPC capability transfer      With the required IPC authority and receive
+                               slot, transferCaps() derives and inserts a
+                               cap into the receiver's CSpace. The sender
+                               normally keeps its source cap.
+
+  seL4_CNode_Move              Moves the existing cap and its MDB entry to
+                               an empty slot. The source slot becomes empty.
+
+cteInsert() links the destination after the source in the MDB, fixes adjacent
+links, and sets flags based on the capability types and derivation. The
+destination has its own cap_t, while both capabilities can name the same
+object. In AArch64, deriving a page-table cap requires it to be mapped.
+The derived page-table cap retains the mapping metadata.
+
+3. EXAMPLE: PARENT DELETES ITS PAGE-TABLE CAP
+------------------------------------------------------------------------------
+
+Assume P has retyped page table T from untyped U, mapped T into the child's
+VSpace, and copied the mapped cap into the child's CSpace. Assume these are
+the only caps to T and the VSpace and mapping stay live.
+
+  Before Delete(P.slot_10)                 After Delete(P.slot_10)
+
+  P.slot_10  [cap to T] --+                 P.slot_10  [empty]
+                         +--> table T
+  C.slot_22  [cap to T] --+                 C.slot_22  [cap to T] --> table T
+
+  1. CNode_Delete resolves P.slot_10 and calls cteDelete().
+  2. finaliseSlot() calls isFinalCapability(). It checks the MDB neighbors
+     with sameObjectAs(). The child cap means P.slot_10 is non-final.
+  3. The AArch64 page-table finalizer leaves the mapping installed when the
+     deleted cap is non-final.
+  4. emptySlot() splices the slot out of the MDB and writes a null cap into
+     the slot. C.slot_22 remains valid.
+  5. If C.slot_22 is later deleted as the final cap and T is still mapped,
+     Arch_finaliseCap() detaches T using its recorded ASID and address.
+     Translations through T are removed, so later accesses may fault.
+
+A final cap is the last cap to the object. Being the original cap or the
+cap held by the creator does not make it final.
+
+4. HOW TO REMOVE THE COPIES WITH REVOKE
+------------------------------------------------------------------------------
+
+  Operation       Target slot                   Other capability slots
+  --------------  ----------------------------  -----------------------------
+  Delete          Empties the selected slot.    Surviving copies stay valid.
+                                                Object finalization can also
+                                                clean up slots owned by a
+                                                CNode or TCB.
+
+  Revoke          Retains the selected cap.     Deletes descendants that the
+                                                kernel recognizes for it.
+
+The MDB is a doubly linked list of CTEs. mdbPrev and mdbNext are list links.
+The flags mdbRevocable and mdbFirstBadged help the kernel recognize derivation
+relationships. A neighboring entry alone does not imply a revocable child.
+
+cteRevoke() repeatedly checks the next slot with isMDBParentOf(). That check
+uses the ancestor's revocability flag, sameRegionAs(), and rules for the cap
+type, including badge boundaries where applicable. Each matching slot is
+deleted through cteDelete(). The loop has preemption points for long cleanup.
+
+In the page-table example, before deleting P.slot_10:
+
+  Keep U and call Revoke(U)
+      |
+      +-- Deletes P.slot_10 and C.slot_22, even in separate CSpaces.
+      +-- Finalizes T when its last cap is removed.
+      +-- Also removes caps to other objects retyped from U.
+      +-- Keeps U available for retyping once the descendants are gone.
+
+If P.slot_10 has already been deleted, Revoke(U) can still reach C.slot_22
+while U remains the recognized ancestor. Revoke(P.slot_10) cannot target
+the former capability after the slot has been emptied.
+
+In the simple two-copy case, Revoke(P.slot_10) instead keeps P.slot_10 and
+deletes C.slot_22. Do not assume that every later copy can revoke copies
+made from it. For example, the ARM kernel marks a plain derived page-table
+copy as non-revocable, so that copy does not become a new revocation root.
+
+Use a separate untyped allocation for a group you need to reclaim together.
+Revoking a shared untyped can affect unrelated services that use its objects.
+
+5. WHAT HAPPENS WHEN A PROCESS ENDS
+------------------------------------------------------------------------------
+
+  Event                         Effect
+  ----------------------------  ---------------------------------------------
+  Creator thread stops          Its child threads can continue running.
+                                Capability slots do not disappear merely
+                                because the creator stops executing.
+
+  Final TCB cap is deleted      The kernel suspends the thread and cleans up
+                                the TCB's internal slots. A TCB does not
+                                represent a complete userspace process.
+
+  Final CNode cap is deleted    The kernel cleans up the slots inside that
+                                CNode. Caps copied into other CNodes can
+                                survive, depending on what else is revoked.
+
+  Child is destroyed by         Userspace tears down the resources it owns.
+  process-server                Shared resources and references outside the
+                                child's CSpace have their own lifetimes.
+
+For final CNode and TCB cleanup, the kernel uses a temporary zombie cap to
+record the work left to do. finaliseSlot() and reduceZombie() drain the
+internal slots, with preemption points during cleanup.
+
+In this lab, process-server waits on the launched app's fault/completion
+endpoint. It then calls sel4utils_destroy_process(). The library revokes
+derived capabilities from the owned child CNode to clear self-references,
+frees the owned CSpace, cleans up the thread, tears down the owned VSpace,
+and frees owned objects such as the fault endpoint and VSpace root.
+
+If the desired policy is "when parent exits, stop its children," the
+process server needs to track those relationships and explicitly stop and
+clean up each affected child. Revoking an individual page-table cap can
+remove memory mappings, but it does not perform that process cleanup.
+
+6. SOURCE MAP
+------------------------------------------------------------------------------
+
+  Relative to the sel4-lab checkout:
+
+  kernel/src/object/untyped.c
+    decodeUntypedInvocation(), invokeUntyped_Retype(), resetUntypedCap()
+
+  kernel/src/object/cnode.c
+    decodeCNodeInvocation(), cteInsert(), cteMove(), insertNewCap()
+    cteDelete(), emptySlot(), finaliseSlot(), reduceZombie()
+    cteRevoke(), isMDBParentOf(), isFinalCapability()
+
+  kernel/src/object/objecttype.c
+    finaliseCap(), sameRegionAs(), sameObjectAs(), isCapRevocable()
+
+  kernel/src/arch/arm/64/object/objecttype.c
+    Arch_deriveCap(), Arch_finaliseCap()
+
+  kernel/include/arch/arm/arch/object/structures.h
+    Arch_isCapRevocable()
+
+  kernel/src/kernel/thread.c
+    transferCaps()
+
+  projects/process-server/server.c
+    App completion and process teardown
+
+  projects/seL4_libs/libsel4utils/src/process.c
+    sel4utils_destroy_process()
+
+  Upstream references
+    https://docs.sel4.systems/Tutorials/capabilities.html
+    https://docs.sel4.systems/Tutorials/untyped.html
+    https://docs.sel4.systems/projects/sel4/api-doc.html

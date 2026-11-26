@@ -282,6 +282,9 @@ static seL4_MessageInfo_t transferCaps(seL4_MessageInfo_t info,
                 break;
             }
 
+            /* CAP LIFE 04: IPC derives a cap from the sender's slot and
+             * inserts it into the receiver's slot below. The sender keeps
+             * its cap. The endpoint badge case above needs no insertion. */
             dc_ret = deriveCap(slot, cap);
 
             if (dc_ret.status != EXCEPTION_NONE) {
