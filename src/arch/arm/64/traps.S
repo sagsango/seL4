@@ -295,6 +295,18 @@ END_FUNC(lower_el_sync)
  * context and record ELR directly, without the syscall adjustment.
  * The interrupt handler can make another thread runnable before return. */
 
+/* XXX: How to avoid getting interrupted by EL0/EL1 interrupt when CPU in EL2:
+The cleanest way to protect EL2 from being interrupted by EL1-bound traffic is
+to leave them routed directly to EL1.  In the ARM architecture, an exception
+can never be taken to a lower exception level than the current one. If an
+interrupt is targeted at EL1, and the processor is currently running code at
+EL2, the CPU interface will automatically buffer/ignore the interrupt signal
+until the processor drops back down to EL1 or EL0.  To configure this:
+1. Ensure the Hypervisor Configuration Register (HCR_EL2) has its IMO (Interrupt
+Mask Override) bit cleared to 0.
+2. Clear the FMO (FIQ Mask Override) and AMO (SError Mask Override) bits as 
+well if you want to block those.
+*/
 BEGIN_FUNC(lower_el_irq)
     kernel_enter
     mrs     x20, ELR
