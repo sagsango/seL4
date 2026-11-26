@@ -231,6 +231,9 @@ void vcpu_init(vcpu_t *vcpu)
 #endif
 }
 
+/* EXCEPTION 12: A guest switch restores vCPU system register state.
+ * Switching to a native thread disables guest execution settings, even
+ * when the kernel keeps the last vCPU cached for a later switch. */
 void vcpu_switch(vcpu_t *new)
 {
     if (likely(ARCH_NODE_STATE(armHSCurVCPU) != new)) {
@@ -568,6 +571,11 @@ exception_t invokeVCPUSetTCB(vcpu_t *vcpu, tcb_t *tcb)
 }
 
 
+/* EXCEPTION 09: Give the architecture handler a chance to handle a
+ * special syndrome, such as a supported debug event. Otherwise report
+ * VCPUFault with the syndrome to the TCB's configured fault endpoint.
+ * In this build HVC64 already took the syscall path in traps.S. A
+ * trapped guest SMC can reach this dispatcher. */
 void handleVCPUFault(word_t hsr)
 {
     MCS_DO_IF_BUDGET({

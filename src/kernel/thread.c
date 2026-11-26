@@ -54,6 +54,9 @@ void activateThread(void)
     case ThreadState_Restart: {
         word_t pc;
 
+        /* PAGE FAULT 16: For the restarted app, getRestartPC reads FaultIP. setNextPC
+         * copies it to the return PC so ERET retries the original store.
+         */
         pc = getRestartPC(NODE_STATE(ksCurThread));
         setNextPC(NODE_STATE(ksCurThread), pc);
         setThreadState(NODE_STATE(ksCurThread), ThreadState_Running);
@@ -123,6 +126,9 @@ void doIPCTransfer(tcb_t *sender, endpoint_t *endpoint, word_t badge,
         doNormalTransfer(sender, sendBuffer, endpoint, badge, grant,
                          receiver, receiveBuffer);
     } else {
+        /* PAGE FAULT 10: The sender's TCB has a saved fault. Marshal it instead of
+         * copying an ordinary userspace message.
+         */
         doFaultTransfer(badge, sender, receiver, receiveBuffer);
     }
 }
@@ -171,6 +177,9 @@ void doReplyTransfer(tcb_t *sender, tcb_t *receiver, cte_t *slot, bool_t grant)
         /** GHOSTUPD: "(True, gs_set_assn cteDeleteOne_'proc (ucast cap_reply_cap))" */
         cteDeleteOne(slot);
 #endif
+        /* PAGE FAULT 15: Interpret the fault reply and clear the saved fault. ARM VMFault
+         * replies allow restart. The app becomes eligible for scheduling.
+         */
         bool_t restart = handleFaultReply(receiver, sender);
         receiver->tcbFault = seL4_Fault_NullFault_new();
         if (restart) {
@@ -231,6 +240,9 @@ void doNormalTransfer(tcb_t *sender, word_t *sendBuffer, endpoint_t *endpoint,
     setRegister(receiver, badgeRegister, badge);
 }
 
+/* EXCEPTION 10: Encode the saved fault type as the IPC label and put
+ * type-specific details into message registers. The badge comes from the
+ * handler endpoint capability and can identify the faulting client. */
 void doFaultTransfer(word_t badge, tcb_t *sender, tcb_t *receiver,
                      word_t *receiverIPCBuffer)
 {
@@ -366,6 +378,8 @@ static void switchSchedContext(void)
 }
 #endif
 
+/* PAGE FAULT 07: sendIPC() blocked the app. When schedule() needs a
+ * new thread, chooseThread() selects the pager from the ready queues. */
 static void scheduleChooseNewThread(void)
 {
     if (ksDomainTime == 0) {

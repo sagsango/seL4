@@ -10,6 +10,12 @@
 #include <arch/machine/hardware.h>
 #include <arch/machine/registerset.h>
 
+/* EXCEPTION 02: Hardware uses the vector base for the destination EL.
+ * On entry, ELR_ELn holds the architectural return address, SPSR_ELn
+ * holds the old PSTATE, and ESR_ELn describes a synchronous exception.
+ * Hardware masks exceptions on entry and leaves x0-x30 for software
+ * to save. FAR_ELn provides the fault address for applicable aborts.
+ * With hypervisor support, this code runs at EL2. Otherwise it runs at EL1. */
 #ifdef CONFIG_ARM_HYPERVISOR_SUPPORT
 
 #define ELR     elr_el2
@@ -72,6 +78,13 @@
  * vector table base address' of ARM DDI 0487B.b ID092517.
  * Each vector entry has 128-byte alignment, and so supports 32 instructions.
  */
+/* EXCEPTION 03: Four groups of four 128-byte entries start at offsets
+ * 0x000 (current EL using SP0), 0x200 (current EL using SP_ELn),
+ * 0x400 (lower EL in AArch64), and 0x600 (lower EL in AArch32).
+ * Within each group the order is synchronous, IRQ, FIQ, SError.
+ * At EL2 the lower AArch64 group can take traps from EL0 or guest EL1.
+ * Architectural routing and the source state select the vector before
+ * the kernel examines ESR. Unsupported entries go to the invalid handler. */
 BEGIN_FUNC(arm_vector_table)
     ventry_invalid                         // Synchronous EL1t/EL2t
     ventry_invalid                         // IRQ EL1t/EL2t
@@ -83,6 +96,9 @@ BEGIN_FUNC(arm_vector_table)
     ventry_invalid                         // FIQ
     ventry_serror                          // SError
 
+    /* PAGE FAULT 02: An EL0 store with a missing translation takes the lower-EL
+     * synchronous vector (VBAR_EL2 + 0x400 in this build).
+     */
     ventry  lower_el_sync                  // Synchronous 64-bit EL0/EL1
     ventry  lower_el_irq                   // IRQ 64-bit EL0/EL1
     ventry_invalid                         // FIQ 64-bit EL0/EL1
@@ -96,6 +112,11 @@ END_FUNC(arm_vector_table)
 
 .section .vectors.text, "ax"
 
+/* EXCEPTION 04: On lower-EL entry, the kernel SP points to the saved
+ * register area for the running TCB. Save GPRs before using them as scratch,
+ * then preserve SP_EL0, the return PC, PSTATE and TLS. After the stub records
+ * FaultIP, lsp_i switches to the kernel stack before entering C.
+ * PT_ELR_EL1 is a context layout name used for both EL1 and EL2 builds. */
 .macro kernel_enter
     /* Storing thread's stack frame */
     stp     x0,  x1,  [sp, #16 * 0]
@@ -139,6 +160,9 @@ BEGIN_FUNC(invalid_vector_entry)
     b       halt
 END_FUNC(invalid_vector_entry)
 
+/* EXCEPTION 05: A same-EL synchronous abort is a kernel exception.
+ * Debug builds can print data or instruction abort diagnostics before halt.
+ * The lower-EL path can instead report a fault to a userspace endpoint. */
 BEGIN_FUNC(cur_el_sync)
     lsp_i   x19
     /* Read esr and branch to respective labels */
@@ -181,6 +205,10 @@ BEGIN_FUNC(cur_el_irq)
     b       c_handle_interrupt
 END_FUNC(cur_el_irq)
 
+/* EXCEPTION 05: ESR.EC selects the handler. Instruction and data aborts
+ * use the VM-fault path. SVC64 and, in a hypervisor build, HVC64 enter the
+ * seL4 syscall ABI. Remaining classes go to the vCPU-fault dispatcher at
+ * EL2 or the undefined/debug instruction handler in the EL1 build. */
 BEGIN_FUNC(lower_el_sync)
     kernel_enter
 
@@ -207,6 +235,10 @@ BEGIN_FUNC(lower_el_sync)
     b       el0_user
 #endif
 
+/* PAGE FAULT 03: lower_el_sync saved the GPRs and return state with kernel_enter.
+ * ESR.EC selects lel_da. Copy ELR to FaultIP without subtracting 4,
+ * switch stacks with lsp_i, then branch to c_handle_data_fault.
+ */
 lel_da:
     mrs     x20, ELR
     str     x20, [sp, #PT_FaultIP]
@@ -221,6 +253,12 @@ lel_ia:
     lsp_i   x19
     b       c_handle_instruction_fault
 
+/* EXCEPTION 06: SVC/HVC is a 4-byte instruction in AArch64. ELR holds
+ * the following instruction. Save ELR - 4 as FaultIP for reporting or
+ * restart, while preserving the following instruction as NextIP.
+ * x7 selects the syscall. x0 carries the capability pointer for
+ * IPC/invocations and x1 carries MessageInfo where applicable.
+ * Selected IPC syscalls can try fastpath before falling back to C. */
 lel_syscall:
     mrs     x20, ELR
     sub     x20, x20, #4
@@ -252,6 +290,10 @@ el0_user:
     lsp_i   x19
     b       c_handle_undefined_instruction
 END_FUNC(lower_el_sync)
+
+/* EXCEPTION 07: IRQ delivery is asynchronous. Save the interrupted
+ * context and record ELR directly, without the syscall adjustment.
+ * The interrupt handler can make another thread runnable before return. */
 
 BEGIN_FUNC(lower_el_irq)
     kernel_enter

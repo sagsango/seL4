@@ -33,6 +33,9 @@ bool_t Arch_handleFaultReply(tcb_t *receiver, tcb_t *sender, word_t faultType)
 word_t Arch_setMRs_fault(tcb_t *sender, tcb_t *receiver, word_t *receiveIPCBuffer, word_t faultType)
 {
     switch (faultType) {
+    /* PAGE FAULT 10: Write the restart PC, fault address, instruction-fetch flag
+     * and ESR to the pager's message registers via setMR().
+     */
     case seL4_Fault_VMFault: {
         setMR(receiver, receiveIPCBuffer, seL4_VMFault_IP, getRestartPC(sender));
         setMR(receiver, receiveIPCBuffer, seL4_VMFault_Addr,

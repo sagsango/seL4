@@ -136,6 +136,9 @@ static inline int fastpath_reply_cap_check(cap_t cap)
 }
 #endif
 
+/* EXCEPTION 13: Successful fastpath IPC restores the selected thread
+ * directly. The fastpath supplies x0/x1 (badge and MessageInfo) as return
+ * values and uses the saved exception return state for ERET. */
 /** DONT_TRANSLATE */
 static inline void NORETURN FORCE_INLINE fastpath_restore(word_t badge, word_t msgInfo, tcb_t *cur_thread)
 {

@@ -71,6 +71,9 @@ static inline void checkInterrupt(void)
 /* The haskell function 'handleEvent' is split into 'handleXXX' variants
  * for each event causing a kernel entry */
 
+/* EXCEPTION 07: Check the interrupt controller and dispatch a pending
+ * IRQ. A timer can trigger rescheduling, or an IRQ notification can wake
+ * a driver. Activate the selected thread before the assembly return. */
 exception_t handleInterruptEntry(void)
 {
 #ifdef CONFIG_KERNEL_MCS
@@ -268,6 +271,9 @@ exception_t handleUserLevelFault(word_t w_a, word_t w_b)
     return EXCEPTION_NONE;
 }
 
+/* PAGE FAULT 04: Call the architecture handler to construct the fault, then
+ * handleFault() to deliver it. Schedule and activate the next thread.
+ */
 exception_t handleVMFaultEvent(vm_fault_type_t vm_faultType)
 {
     MCS_DO_IF_BUDGET({
@@ -399,6 +405,10 @@ static inline lookupCap_ret_t lookupReply(void)
     return lu_ret;
 }
 #else
+/* PAGE FAULT 14: The pager's seL4_Reply() reaches SysReply through SVC.
+ * Resolve the implicit caller cap to the blocked app TCB and
+ * pass it to doReplyTransfer().
+ */
 static void handleReply(void)
 {
     cte_t *callerSlot;
@@ -444,6 +454,11 @@ static void handleRecv(bool_t isBlocking)
     word_t epCPtr;
     lookupCap_ret_t lu_ret;
 
+    /* PAGE FAULT 08: The pager's SVC comes through lel_syscall, c_handle_syscall,
+     * slowpath and handleSyscall(SysRecv). Look up the Receive cap
+     * and, in this classic build, clear the previous caller slot before
+     * calling receiveIPC().
+     */
     epCPtr = getRegister(NODE_STATE(ksCurThread), capRegister);
 
     lu_ret = lookupCap(NODE_STATE(ksCurThread), epCPtr);

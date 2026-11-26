@@ -350,6 +350,9 @@ void setExtraBadge(word_t *bufferPtr, word_t badge,
 }
 
 #ifndef CONFIG_KERNEL_MCS
+/* PAGE FAULT 11: Block the app on reply and use cteInsert() to put its reply
+ * cap in the pager's tcbCaller slot. The pager returns from Recv.
+ */
 void setupCallerCap(tcb_t *sender, tcb_t *receiver, bool_t canGrant)
 {
     cte_t *replySlot, *callerSlot;

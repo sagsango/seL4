@@ -111,6 +111,9 @@ static inline void copyMRsFault(tcb_t *sender, tcb_t *receiver, MessageID_t id,
     }
 }
 
+/* PAGE FAULT 15: VMFault reaches Arch_handleFaultReply(), whose ARM VMFault
+ * branch returns true so doReplyTransfer() can restart the app.
+ */
 bool_t handleFaultReply(tcb_t *receiver, tcb_t *sender)
 {
     /* These lookups are moved inward from doReplyTransfer */
@@ -188,6 +191,9 @@ bool_t handleFaultReply(tcb_t *receiver, tcb_t *sender)
     }
 }
 
+/* PAGE FAULT 10: VMFault dispatches to Arch_setMRs_fault() for the ARM payload.
+ * doFaultTransfer() adds the fault type as the MessageInfo label.
+ */
 word_t setMRs_fault(tcb_t *sender, tcb_t *receiver, word_t *receiveIPCBuffer)
 {
     switch (seL4_Fault_get_seL4_FaultType(sender->tcbFault)) {

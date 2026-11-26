@@ -54,6 +54,9 @@ void NORETURN vm_fault_slowpath(vm_fault_type_t type)
 }
 #endif
 
+/* EXCEPTION 08: Serialize entry and run the per-entry hook. The VM
+ * fault fastpath can attempt direct delivery where configured. The slow
+ * path decodes the abort, sends fault IPC, and selects a thread to run. */
 static inline void NORETURN c_handle_vm_fault(vm_fault_type_t type)
 {
     NODE_LOCK_SYS;
@@ -74,6 +77,9 @@ static inline void NORETURN c_handle_vm_fault(vm_fault_type_t type)
     UNREACHABLE();
 }
 
+/* PAGE FAULT 04: Enter c_handle_vm_fault(seL4_DataFault). After the lock and
+ * entry hook, this lab calls handleVMFaultEvent() on the slow path.
+ */
 void VISIBLE NORETURN c_handle_data_fault(void)
 {
     c_handle_vm_fault(seL4_DataFault);
@@ -99,6 +105,9 @@ void VISIBLE NORETURN c_handle_interrupt(void)
     restore_user_context();
 }
 
+/* EXCEPTION 08: The syscall number is independent of ESR.EC. The
+ * normal range enters handleSyscall(). The other path handles debug
+ * syscalls and reports an unknown-syscall fault for unrecognized values. */
 void NORETURN slowpath(syscall_t syscall)
 {
     if (unlikely(syscall < SYSCALL_MIN || syscall > SYSCALL_MAX)) {
@@ -195,6 +204,8 @@ void VISIBLE c_handle_fastpath_reply_recv(word_t cptr, word_t msgInfo)
 #endif
 
 #ifdef CONFIG_ARM_HYPERVISOR_SUPPORT
+/* EXCEPTION 08: The assembly entry passes the full EL2 syndrome.
+ * The historical name hsr is used here even when the value is ESR_EL2. */
 VISIBLE NORETURN void c_handle_vcpu_fault(word_t hsr)
 {
     NODE_LOCK_SYS;

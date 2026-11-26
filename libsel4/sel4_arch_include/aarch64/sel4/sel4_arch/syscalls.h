@@ -55,6 +55,10 @@
  *      any data (e.g. seL4_Yield)
  */
 
+/* EXCEPTION 00: Native AArch64 libsel4 enters with SVC #0. The syscall
+ * selector is in x7. The SVC immediate is zero regardless of the syscall.
+ * x0 names the destination cap, x1 contains MessageInfo, and x2-x5 carry
+ * the first four message registers for this send wrapper. */
 static inline void arm_sys_send(seL4_Word sys, seL4_Word dest, seL4_Word info_arg, seL4_Word mr0, seL4_Word mr1,
                                 seL4_Word mr2, seL4_Word mr3)
 {

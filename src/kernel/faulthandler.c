@@ -63,8 +63,18 @@ void handleFault(tcb_t *tptr)
     }
 }
 
+/* PAGE FAULT 06: The classic handleFault() calls here. Resolve the handler CPtr
+ * in the app's CSpace, save the fault in its TCB, and call sendIPC
+ * with blocking and call semantics. The app never invokes seL4_Call
+ * to send this fault.
+ */
 exception_t sendFaultIPC(tcb_t *tptr)
 {
+    /* EXCEPTION 10: In the classic kernel the handler CPtr is resolved in
+     * the faulting TCB's CSpace. A valid endpoint with send and grant or
+     * grant-reply rights lets fault IPC carry the saved fault to a receiver.
+     * A failed handler lookup or invalid authority leads to double-fault
+     * handling. MCS uses a stored endpoint capability in the path above. */
     cptr_t handlerCPtr;
     cap_t  handlerCap;
     lookupCap_ret_t lu_ret;

@@ -214,6 +214,8 @@ static inline void setVtable(pptr_t addr)
 {
     dsb();
     if (config_set(CONFIG_ARM_HYPERVISOR_SUPPORT)) {
+        /* EXCEPTION 01: Install seL4's vector base at the kernel's EL.
+         * A guest's VBAR_EL1 is separate from this EL2 vector base. */
         MSR("vbar_el2", addr);
     } else {
         MSR("vbar_el1", addr);

@@ -117,6 +117,10 @@
 
 #define HCR_NATIVE ( HCR_COMMON | HCR_DC | HCR_TTLB | HCR_TVM | HCR_TRVM | HCR_TGE )
 
+/* EXCEPTION 12: With a vCPU active, guest EL0 can take its ordinary
+ * SVC to guest EL1. A trap routed to EL2 enters seL4 instead. The native
+ * HCR setting uses TGE to route native EL0 exceptions to seL4 at EL2.
+ * TSC in HCR_COMMON routes guest SMC instructions to EL2. */
 #define HCR_VCPU   ( HCR_COMMON | HCR_MAYBE_TWI_TWE )
 
 /* CPTR_EL2 value set at boot. EL0 and EL1 accesses to the following trap to EL2

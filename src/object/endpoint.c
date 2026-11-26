@@ -24,6 +24,10 @@ void sendIPC(bool_t blocking, bool_t do_call, word_t badge,
              bool_t canGrant, bool_t canGrantReply, tcb_t *thread, endpoint_t *epptr)
 #endif
 {
+    /* PAGE FAULT 07: When no receiver is waiting, queue the app as BlockedOnSend.
+     * When a receiver is already waiting, transfer directly via the
+     * EPState_Recv branch. Both routes use doIPCTransfer().
+     */
     switch (endpoint_ptr_get_state(epptr)) {
     case EPState_Idle:
     case EPState_Send:
@@ -245,6 +249,10 @@ void receiveIPC(tcb_t *thread, cap_t cap, bool_t isBlocking)
                 thread_state_ptr_get_blockingIPCCanGrantReply(&sender->tcbState);
 
             /* Do the transfer */
+            /* PAGE FAULT 09: The pager dequeues the blocked app and transfers its fault.
+             * If the pager reaches Recv first, it queues as BlockedOnReceive
+             * and sendIPC() performs this transfer when the app faults.
+             */
             doIPCTransfer(sender, epptr, badge,
                           canGrant, thread);
 
