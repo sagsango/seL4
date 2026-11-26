@@ -77,8 +77,8 @@ static inline void NORETURN c_handle_vm_fault(vm_fault_type_t type)
     UNREACHABLE();
 }
 
-/* PAGE FAULT 04: Enter c_handle_vm_fault(seL4_DataFault). After the lock and
- * entry hook, this lab calls handleVMFaultEvent() on the slow path.
+/* [PAGE_FAULT_FLOW (04): Enter c_handle_vm_fault(seL4_DataFault). After the lock and
+ * entry hook, this lab calls handleVMFaultEvent() on the slow path.]
  */
 void VISIBLE NORETURN c_handle_data_fault(void)
 {

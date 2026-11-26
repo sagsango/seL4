@@ -21,9 +21,9 @@
  * values, returning to native EL0, a guest context such as EL1h, or idle
  * at the kernel's EL as selected by the saved state. IPC fastpaths have
  * their own restore sequence. */
-/* PAGE FAULT 16: For the app retry, NextIP contains the original store PC.
+/* [PAGE_FAULT_FLOW (16): For the app retry, NextIP contains the original store PC.
  * For the pager's receive return at step 12, this restores the
- * receive registers and the instruction after the pager's SVC.
+ * receive registers and the instruction after the pager's SVC.]
  */
 /** DONT_TRANSLATE */
 void VISIBLE NORETURN restore_user_context(void)

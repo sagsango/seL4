@@ -54,8 +54,8 @@ void activateThread(void)
     case ThreadState_Restart: {
         word_t pc;
 
-        /* PAGE FAULT 16: For the restarted app, getRestartPC reads FaultIP. setNextPC
-         * copies it to the return PC so ERET retries the original store.
+        /* [PAGE_FAULT_FLOW (16): For the restarted app, getRestartPC reads FaultIP. setNextPC
+         * copies it to the return PC so ERET retries the original store.]
          */
         pc = getRestartPC(NODE_STATE(ksCurThread));
         setNextPC(NODE_STATE(ksCurThread), pc);
@@ -126,8 +126,8 @@ void doIPCTransfer(tcb_t *sender, endpoint_t *endpoint, word_t badge,
         doNormalTransfer(sender, sendBuffer, endpoint, badge, grant,
                          receiver, receiveBuffer);
     } else {
-        /* PAGE FAULT 10: The sender's TCB has a saved fault. Marshal it instead of
-         * copying an ordinary userspace message.
+        /* [PAGE_FAULT_FLOW (10): The sender's TCB has a saved fault. Marshal it instead of
+         * copying an ordinary userspace message.]
          */
         doFaultTransfer(badge, sender, receiver, receiveBuffer);
     }
@@ -177,8 +177,8 @@ void doReplyTransfer(tcb_t *sender, tcb_t *receiver, cte_t *slot, bool_t grant)
         /** GHOSTUPD: "(True, gs_set_assn cteDeleteOne_'proc (ucast cap_reply_cap))" */
         cteDeleteOne(slot);
 #endif
-        /* PAGE FAULT 15: Interpret the fault reply and clear the saved fault. ARM VMFault
-         * replies allow restart. The app becomes eligible for scheduling.
+        /* [PAGE_FAULT_FLOW (15): Interpret the fault reply and clear the saved fault. ARM VMFault
+         * replies allow restart. The app becomes eligible for scheduling.]
          */
         bool_t restart = handleFaultReply(receiver, sender);
         receiver->tcbFault = seL4_Fault_NullFault_new();
@@ -378,8 +378,8 @@ static void switchSchedContext(void)
 }
 #endif
 
-/* PAGE FAULT 07: sendIPC() blocked the app. When schedule() needs a
- * new thread, chooseThread() selects the pager from the ready queues. */
+/* [PAGE_FAULT_FLOW (07): sendIPC() blocked the app. When schedule() needs a
+ * new thread, chooseThread() selects the pager from the ready queues.] */
 static void scheduleChooseNewThread(void)
 {
     if (ksDomainTime == 0) {

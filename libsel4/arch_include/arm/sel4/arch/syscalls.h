@@ -49,7 +49,7 @@ LIBSEL4_INLINE_FUNC void seL4_NBSendWithMRs(seL4_CPtr dest, seL4_MessageInfo_t m
                 );
 }
 
-/* PAGE FAULT 14: The pager's reply wrapper enters via arm_sys_reply and SVC. */
+/* [PAGE_FAULT_FLOW (14): The pager's reply wrapper enters via arm_sys_reply and SVC.] */
 #ifndef CONFIG_KERNEL_MCS
 LIBSEL4_INLINE_FUNC void seL4_Reply(seL4_MessageInfo_t msgInfo)
 {
@@ -74,7 +74,9 @@ LIBSEL4_INLINE_FUNC void seL4_Signal(seL4_CPtr dest)
 }
 
 
-/* PAGE FAULT 08/12: arm_sys_recv enters via SVC and returns the fault payload. */
+/* [PAGE_FAULT_FLOW (08): arm_sys_recv enters the kernel via SVC.]
+ * [PAGE_FAULT_FLOW (12): arm_sys_recv returns the fault payload.]
+ */
 #ifdef CONFIG_KERNEL_MCS
 LIBSEL4_INLINE_FUNC seL4_MessageInfo_t seL4_Recv(seL4_CPtr src, seL4_Word *sender, seL4_CPtr reply)
 #else

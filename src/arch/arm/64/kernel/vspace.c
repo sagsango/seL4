@@ -817,8 +817,8 @@ static pte_t makeUserPagePTE(paddr_t paddr, vm_rights_t vm_rights, bool_t cap_re
  * instruction aborts. With an active vCPU it translates the address
  * through guest stage 1 to obtain the intermediate physical address.
  * The prefetch flag lets the receiver distinguish fetches from data accesses. */
-/* PAGE FAULT 05: Read FAR and ESR for the native data abort. Store a VMFault
- * in current_fault and return EXCEPTION_FAULT to the dispatcher.
+/* [PAGE_FAULT_FLOW (05): Read FAR and ESR for the native data abort. Store a VMFault
+ * in current_fault and return EXCEPTION_FAULT to the dispatcher.]
  */
 exception_t handleVMFault(tcb_t *thread, vm_fault_type_t vm_faultType)
 {
@@ -1308,8 +1308,8 @@ static exception_t performPageTableInvocationUnmap(cap_t cap, cte_t *ctSlot)
     return EXCEPTION_NONE;
 }
 
-/* PAGE FAULT 13: The pager's Page_Map invocation installs the actual frame
- * translation. Its earlier reservation was userspace bookkeeping.
+/* [PAGE_FAULT_FLOW (13): The pager's Page_Map invocation installs the actual frame
+ * translation. Its earlier reservation was userspace bookkeeping.]
  */
 static exception_t performPageInvocationMap(asid_t asid, cap_t cap, cte_t *ctSlot,
                                             pte_t pte, pte_t *ptSlot)

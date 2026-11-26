@@ -96,8 +96,8 @@ BEGIN_FUNC(arm_vector_table)
     ventry_invalid                         // FIQ
     ventry_serror                          // SError
 
-    /* PAGE FAULT 02: An EL0 store with a missing translation takes the lower-EL
-     * synchronous vector (VBAR_EL2 + 0x400 in this build).
+    /* [PAGE_FAULT_FLOW (02): An EL0 store with a missing translation takes the lower-EL
+     * synchronous vector (VBAR_EL2 + 0x400 in this build).]
      */
     ventry  lower_el_sync                  // Synchronous 64-bit EL0/EL1
     ventry  lower_el_irq                   // IRQ 64-bit EL0/EL1
@@ -235,9 +235,9 @@ BEGIN_FUNC(lower_el_sync)
     b       el0_user
 #endif
 
-/* PAGE FAULT 03: lower_el_sync saved the GPRs and return state with kernel_enter.
+/* [PAGE_FAULT_FLOW (03): lower_el_sync saved the GPRs and return state with kernel_enter.
  * ESR.EC selects lel_da. Copy ELR to FaultIP without subtracting 4,
- * switch stacks with lsp_i, then branch to c_handle_data_fault.
+ * switch stacks with lsp_i, then branch to c_handle_data_fault.]
  */
 lel_da:
     mrs     x20, ELR

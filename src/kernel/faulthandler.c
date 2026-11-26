@@ -63,10 +63,10 @@ void handleFault(tcb_t *tptr)
     }
 }
 
-/* PAGE FAULT 06: The classic handleFault() calls here. Resolve the handler CPtr
+/* [PAGE_FAULT_FLOW (06): The classic handleFault() calls here. Resolve the handler CPtr
  * in the app's CSpace, save the fault in its TCB, and call sendIPC
  * with blocking and call semantics. The app never invokes seL4_Call
- * to send this fault.
+ * to send this fault.]
  */
 exception_t sendFaultIPC(tcb_t *tptr)
 {

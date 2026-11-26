@@ -9,7 +9,7 @@
 #include <arch/machine.h>
 #include <plat/machine/hardware.h>
 
-/* PAGE FAULT 16: Read the faulting instruction address saved by the vector. */
+/* [PAGE_FAULT_FLOW (16): Read the faulting instruction address saved by the vector.] */
 word_t PURE getRestartPC(tcb_t *thread)
 {
     return getRegister(thread, FaultIP);

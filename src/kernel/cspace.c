@@ -12,7 +12,9 @@
 #include <model/statedata.h>
 #include <arch/machine.h>
 
-/* PAGE FAULT 06/08: Resolve the app's fault cap or the pager's receive cap. */
+/* [PAGE_FAULT_FLOW (06): Resolve the app's fault-handler cap.]
+ * [PAGE_FAULT_FLOW (08): Resolve the pager's receive cap.]
+ */
 lookupCap_ret_t lookupCap(tcb_t *thread, cptr_t cPtr)
 {
     lookupSlot_raw_ret_t lu_ret;

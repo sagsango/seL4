@@ -271,8 +271,8 @@ exception_t handleUserLevelFault(word_t w_a, word_t w_b)
     return EXCEPTION_NONE;
 }
 
-/* PAGE FAULT 04: Call the architecture handler to construct the fault, then
- * handleFault() to deliver it. Schedule and activate the next thread.
+/* [PAGE_FAULT_FLOW (04): Call the architecture handler to construct the fault, then
+ * handleFault() to deliver it. Schedule and activate the next thread.]
  */
 exception_t handleVMFaultEvent(vm_fault_type_t vm_faultType)
 {
@@ -405,9 +405,9 @@ static inline lookupCap_ret_t lookupReply(void)
     return lu_ret;
 }
 #else
-/* PAGE FAULT 14: The pager's seL4_Reply() reaches SysReply through SVC.
+/* [PAGE_FAULT_FLOW (14): The pager's seL4_Reply() reaches SysReply through SVC.
  * Resolve the implicit caller cap to the blocked app TCB and
- * pass it to doReplyTransfer().
+ * pass it to doReplyTransfer().]
  */
 static void handleReply(void)
 {
@@ -454,10 +454,10 @@ static void handleRecv(bool_t isBlocking)
     word_t epCPtr;
     lookupCap_ret_t lu_ret;
 
-    /* PAGE FAULT 08: The pager's SVC comes through lel_syscall, c_handle_syscall,
+    /* [PAGE_FAULT_FLOW (08): The pager's SVC comes through lel_syscall, c_handle_syscall,
      * slowpath and handleSyscall(SysRecv). Look up the Receive cap
      * and, in this classic build, clear the previous caller slot before
-     * calling receiveIPC().
+     * calling receiveIPC().]
      */
     epCPtr = getRegister(NODE_STATE(ksCurThread), capRegister);
 
