@@ -161,6 +161,7 @@ void doReplyTransfer(tcb_t *sender, tcb_t *receiver, cte_t *slot, bool_t grant)
         setThreadState(receiver, ThreadState_Running);
 #else
         /** GHOSTUPD: "(True, gs_set_assn cteDeleteOne_'proc (ucast cap_reply_cap))" */
+        /* CAP 11: A classic reply capability is consumed after use. */
         cteDeleteOne(slot);
         setThreadState(receiver, ThreadState_Running);
         possibleSwitchTo(receiver);
@@ -221,6 +222,8 @@ void doNormalTransfer(tcb_t *sender, word_t *sendBuffer, endpoint_t *endpoint,
     msgTransferred = copyMRs(sender, sendBuffer, receiver, receiveBuffer,
                              seL4_MessageInfo_get_length(tag));
 
+    /* CAP 09: Extra capabilities are handled separately from message
+     * words. The lab shell sets extraCaps to zero on its run requests. */
     tag = transferCaps(tag, endpoint, receiver, receiveBuffer);
 
     tag = seL4_MessageInfo_set_length(tag, msgTransferred);

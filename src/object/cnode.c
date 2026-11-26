@@ -188,6 +188,8 @@ exception_t decodeCNodeInvocation(word_t invLabel, word_t length, cap_t cap,
         if (isMove) {
             return invokeCNodeMove(newCap, srcSlot, destSlot);
         } else {
+            /* CAP 06: Install the derived cap in the destination CNode
+             * after decoding and applying the requested rights and badge. */
             return invokeCNodeInsert(newCap, srcSlot, destSlot);
         }
     }

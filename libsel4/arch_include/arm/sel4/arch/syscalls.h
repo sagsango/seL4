@@ -165,6 +165,8 @@ LIBSEL4_INLINE_FUNC seL4_MessageInfo_t seL4_NBRecv(seL4_CPtr src, seL4_Word *sen
     return info;
 }
 
+/* CAP 09: Pass a CPtr from the caller's CSpace and a message tag to the
+ * kernel. The tag carries the word count and any extra-cap count. */
 LIBSEL4_INLINE_FUNC seL4_MessageInfo_t seL4_Call(seL4_CPtr dest, seL4_MessageInfo_t msgInfo)
 {
     seL4_MessageInfo_t info;

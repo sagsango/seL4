@@ -306,6 +306,8 @@ static exception_t handleInvocation(bool_t isCall, bool_t isBlocking)
 #endif
 
     /* faulting section */
+    /* CAP 09: Resolve the syscall's CPtr through the calling thread's
+     * CSpace. The number only names a slot in that thread's namespace. */
     lu_ret = lookupCapAndSlot(thread, cptr);
 
     if (unlikely(lu_ret.status != EXCEPTION_NONE)) {

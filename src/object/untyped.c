@@ -298,7 +298,8 @@ exception_t invokeUntyped_Retype(cte_t *srcSlot,
     srcSlot->cap = cap_untyped_cap_set_capFreeIndex(srcSlot->cap,
                                                     GET_FREE_INDEX(regionBase, freeRef));
 
-    /* Create new objects and caps. */
+    /* CAP 05: Retype part of the authorized untyped region into kernel
+     * objects and install their first capabilities in destination slots. */
     createNewObjects(newType, srcSlot, destCNode, destOffset, destLength,
                      retypeBase, userSize, deviceMemory);
 

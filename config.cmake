@@ -248,6 +248,11 @@ config_option(
   DEFAULT "${KernelDebugBuild}" DEPENDS "NOT KernelVerificationBuild" DEFAULT_DISABLED OFF)
 
 config_option(
+  KernelLabCapabilityTrace LAB_CAPABILITY_TRACE
+  "Trace the initial capability handoff in the seL4 lab"
+  DEFAULT OFF DEPENDS "KernelPrinting" DEFAULT_DISABLED OFF)
+
+config_option(
   KernelInvocationReportErrorIPC KERNEL_INVOCATION_REPORT_ERROR_IPC
   "Allows the kernel to write the userError to the IPC buffer" DEFAULT OFF DEPENDS "KernelPrinting"
   DEFAULT_DISABLED OFF)

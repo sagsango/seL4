@@ -507,7 +507,8 @@ BOOT_CODE tcb_t *create_initial_thread(cap_t root_cnode_cap, cap_t it_pd_cap, vp
         return NULL;
     }
 
-    /* initialise TCB (corresponds directly to abstract specification) */
+    /* CAP 02: Install the root CNode, VSpace and derived IPC-buffer
+     * frame cap in the initial TCB's kernel-managed slots. */
     cteInsert(
         root_cnode_cap,
         SLOT_PTR(pptr_of_cap(root_cnode_cap), seL4_CapInitThreadCNode),

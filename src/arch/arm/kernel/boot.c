@@ -445,12 +445,17 @@ static BOOT_CODE bool_t try_init_kernel(
         return false;
     }
 
-    /* create the root cnode */
+    /* CAP 01: Build the initial task's CSpace. Its root CNode holds slots
+     * for the kernel objects and resource authority handed out at boot. */
     root_cnode_cap = create_root_cnode();
     if (cap_get_capType(root_cnode_cap) == cap_null_cap) {
         printf("ERROR: root c-node creation failed\n");
         return false;
     }
+
+#ifdef CONFIG_LAB_CAPABILITY_TRACE
+    printf("[cap 01] Kernel created the initial CSpace\n");
+#endif
 
     /* create the cap for managing thread domains */
     create_domain_cap(root_cnode_cap);
@@ -577,7 +582,8 @@ static BOOT_CODE bool_t try_init_kernel(
      * read by the hardware page table walker */
     cleanInvalidateL1Caches();
 
-    /* create the initial thread */
+    /* CAP 02: Bind the initial TCB to the root CSpace and VSpace. In
+     * this lab the ELF started by this TCB is process-server. */
     tcb_t *initial = create_initial_thread(
                          root_cnode_cap,
                          it_pd_cap,
@@ -592,9 +598,13 @@ static BOOT_CODE bool_t try_init_kernel(
         return false;
     }
 
+#ifdef CONFIG_LAB_CAPABILITY_TRACE
+    printf("[cap 02] Kernel installed the initial thread and address space\n");
+#endif
     init_core_state(initial);
 
-    /* create all of the untypeds. Both devices and kernel window memory */
+    /* CAP 03: Give the initial task untyped capabilities for usable RAM and
+     * device regions. BootInfo describes their slots and properties. */
     if (!create_untypeds(root_cnode_cap)) {
         printf("ERROR: could not create untypteds for kernel image boot memory\n");
         return false;
@@ -605,6 +615,9 @@ static BOOT_CODE bool_t try_init_kernel(
 
     /* finalise the bootinfo frame */
     bi_finalise();
+#ifdef CONFIG_LAB_CAPABILITY_TRACE
+    printf("[cap 03] Kernel finalized BootInfo with the initial capability ranges\n");
+#endif
 
     /* Flushing the L1 cache and invalidating the TLB is good enough here to
      * make sure everything written by the kernel is visible to userland. There
